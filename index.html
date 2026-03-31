@@ -874,6 +874,7 @@
       ttsOn: lsGet(STORAGE_KEYS.TTS_ON, '1') === '1',
       busy: false,
       controller: null,
+      translateGeneration: 0,
       // TTS
       speakGeneration: 0,
       speaking: false,
@@ -1122,7 +1123,7 @@
         if (afterDone) afterDone();
       };
 
-      const charMs = /[\u3040-\u9fff]/.test(text) ? 120 : 60;
+      const charMs = /[\u4e00-\u9fff]/.test(text) ? 120 : 60;
       const dynamicTimeout = Math.max(CONFIG.TTS_TIMEOUT_MIN_MS, text.length * charMs);
       const ttsAc = new AbortController();
       state.ttsController = ttsAc;
@@ -1538,6 +1539,7 @@ Your task:
 
       const controller = new AbortController();
       state.controller = controller;
+      const gen = ++state.translateGeneration;
       state.busy = true;
 
       try {
@@ -1601,7 +1603,7 @@ Your task:
         const refineSignal = controller.signal;
         refineTranslation(text, translated, srcLang, tgtLang, refineSignal)
           .then(refined => {
-            if (refineSignal.aborted) return;
+            if (refineSignal.aborted || state.translateGeneration !== gen) return;
             const finalText = (refined && refined !== translated) ? refined : translated;
             if (refined && refined !== translated) {
               // Update UI
@@ -1620,14 +1622,14 @@ Your task:
               el.btnPlayFil._ttsText = refined;
             }
             // Desktop auto-TTS: speak after refine completes (with best available text)
-            if (wantTts && !mobile && !refineSignal.aborted) {
+            if (wantTts && !mobile && !refineSignal.aborted && state.translateGeneration === gen) {
               speak(finalText, tgtLang);
             }
           })
           .catch(e => {
             if (!isAbortError(e)) console.warn('Refine failed:', e);
             // Refine failed: still speak the initial translation on desktop
-            if (wantTts && !mobile && !refineSignal.aborted) {
+            if (wantTts && !mobile && !refineSignal.aborted && state.translateGeneration === gen) {
               speak(translated, tgtLang);
             }
           });
@@ -1650,6 +1652,7 @@ Your task:
 
     function abortInFlight() {
       if (state.controller) { try { state.controller.abort(); } catch {} state.controller = null; }
+      state.translateGeneration++;
       clearTranslationUi();
       state.busy = false;
       if (!activeRecognition) setEditable(true);
@@ -2093,7 +2096,7 @@ Your task:
           temperature: 0.3,
           models: SUMMARY_MODEL_FALLBACK,
           signal: summaryController.signal,
-          cacheKey: 'refine',
+          cacheKey: 'summary',
         });
         if (summaryController.signal.aborted || state.summaryController !== summaryController || state.summaryRequestId !== requestId) {
           throw makeAbortError();
