@@ -1275,7 +1275,7 @@
       if (!text?.trim() || !state.ttsOn) return;
       if (state.speaking) stopSpeaking();
       if ('speechSynthesis' in window) speechSynthesis.cancel();
-      await playTtsCore(text, lang, { openAiFirst: false });
+      await playTtsCore(text, lang, { openAiFirst: true });
     }
 
     function stopSpeaking() {
